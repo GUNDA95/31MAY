@@ -2,7 +2,7 @@
 const WORLD_SIZE = 100;
 const CHUNK_SIZE = 16;
 const BLOCK_SIZE = 1;
-const RENDER_DISTANCE = 2; // Ridotto per migliori prestazioni
+const RENDER_DISTANCE = 2;
 
 // Game class
 class OpenWorldGame {
@@ -21,10 +21,20 @@ class OpenWorldGame {
       loadingMessage.style.display = 'none';
     }
     
+    // Inizializza le variabili di movimento
+    this.moveForward = false;
+    this.moveBackward = false;
+    this.moveLeft = false;
+    this.moveRight = false;
+    this.isMoving = false;
+    
     this.setupLighting();
     this.setupControls();
     this.initWorld();
     this.createAirplane();
+    
+    // Posiziona correttamente il giocatore sopra il terreno
+    this.camera.position.set(0, 15, 0); // Inizia da un'altezza sicura
     
     window.addEventListener('resize', () => this.onWindowResize());
     
@@ -46,20 +56,12 @@ class OpenWorldGame {
   }
   
   setupControls() {
-    this.moveForward = false;
-    this.moveBackward = false;
-    this.moveLeft = false;
-    this.moveRight = false;
     this.canJump = false;
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.playerHeight = 1.8;
     
-    // Set initial camera position
-    this.camera.position.y = 30; // Start high to see the world
-    this.camera.position.z = 5;
-    
-    // Set up keyboard controls
+    // Set up keyboard controls with proper release handling
     document.addEventListener('keydown', (event) => this.onKeyDown(event));
     document.addEventListener('keyup', (event) => this.onKeyUp(event));
     
@@ -149,81 +151,67 @@ class OpenWorldGame {
     this.chunks = {};
     this.noise = new SimplexNoise();
     
-    // Create ground
-    this.generateTerrain();
+    // Crea un terreno di base solido
+    this.createBaseTerrain();
     
-    // Create a simple collision plane for now
+    // Imposta una altezza di riferimento per la collisione con il terreno
     this.groundLevel = 0;
   }
   
-  generateTerrain() {
-    // Generate chunks around player
-    const playerChunkX = Math.floor(this.camera.position.x / (CHUNK_SIZE * BLOCK_SIZE));
-    const playerChunkZ = Math.floor(this.camera.position.z / (CHUNK_SIZE * BLOCK_SIZE));
+  createBaseTerrain() {
+    // Crea un terreno di base grande e piatto
+    const baseGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
+    baseGeometry.rotateX(-Math.PI / 2);
     
-    for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
-      for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
-        const chunkX = playerChunkX + x;
-        const chunkZ = playerChunkZ + z;
-        const chunkId = `${chunkX},${chunkZ}`;
-        
-        if (!this.chunks[chunkId]) {
-          this.chunks[chunkId] = this.createChunk(chunkX, chunkZ);
-        }
-      }
-    }
-  }
-  
-  createChunk(chunkX, chunkZ) {
-    const chunk = new THREE.Group();
-    chunk.position.set(
-      chunkX * CHUNK_SIZE * BLOCK_SIZE,
-      0,
-      chunkZ * CHUNK_SIZE * BLOCK_SIZE
-    );
-    
-    // Crea un terreno più semplice per migliorare le prestazioni
-    const geometry = new THREE.PlaneGeometry(
-      CHUNK_SIZE * BLOCK_SIZE,
-      CHUNK_SIZE * BLOCK_SIZE,
-      CHUNK_SIZE - 1,
-      CHUNK_SIZE - 1
-    );
-    geometry.rotateX(-Math.PI / 2);
-    
-    // Imposta l'altezza dei vertici in base al rumore
-    const vertices = geometry.attributes.position.array;
+    // Applica una leggera variazione d'altezza
+    const vertices = baseGeometry.attributes.position.array;
     for (let i = 0; i < vertices.length; i += 3) {
-      const x = vertices[i] + chunk.position.x;
-      const z = vertices[i + 2] + chunk.position.z;
-      vertices[i + 1] = this.generateHeight(x / BLOCK_SIZE, z / BLOCK_SIZE);
+      const x = vertices[i];
+      const z = vertices[i + 2];
+      vertices[i + 1] = this.generateHeight(x, z);
     }
     
     // Aggiorna la geometria
-    geometry.computeVertexNormals();
+    baseGeometry.computeVertexNormals();
     
-    // Crea un materiale per il terreno
+    // Crea un materiale per il terreno con texture
     const material = new THREE.MeshLambertMaterial({ 
       color: 0x8B4513,
       wireframe: false
     });
     
-    const terrain = new THREE.Mesh(geometry, material);
-    chunk.add(terrain);
+    const baseTerrain = new THREE.Mesh(baseGeometry, material);
+    this.scene.add(baseTerrain);
     
-    // Aggiungi alcuni alberi
-    for (let i = 0; i < 5; i++) {
-      const x = Math.floor(Math.random() * CHUNK_SIZE);
-      const z = Math.floor(Math.random() * CHUNK_SIZE);
-      const worldX = chunkX * CHUNK_SIZE + x;
-      const worldZ = chunkZ * CHUNK_SIZE + z;
-      const y = this.generateHeight(worldX, worldZ);
-      
-      this.createTree(chunk, x, y, z);
+    // Aggiungi alberi e dettagli al terreno
+    this.addTerrainDetails();
+  }
+  
+  addTerrainDetails() {
+    // Aggiungi alberi al mondo
+    for (let i = 0; i < 30; i++) {
+      const x = Math.random() * 100 - 50;
+      const z = Math.random() * 100 - 50;
+      const y = this.generateHeight(x, z);
+      this.createTree(x, y, z);
     }
     
-    this.scene.add(chunk);
-    return chunk;
+    // Aggiunge una "skybox" per creare un orizzonte
+    this.createSkybox();
+  }
+  
+  createSkybox() {
+    // Crea un semplice cielo sferico
+    const skyGeometry = new THREE.SphereGeometry(400, 32, 32);
+    // Inverti le normali per vedere il cielo dall'interno
+    skyGeometry.scale(-1, 1, 1);
+    
+    const skyMaterial = new THREE.MeshBasicMaterial({
+      color: 0x87CEEB
+    });
+    
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    this.scene.add(sky);
   }
   
   generateHeight(x, z) {
@@ -237,87 +225,32 @@ class OpenWorldGame {
     // Combina il rumore a scale diverse
     const combinedNoise = (noise1 + 0.5 * noise2) / 1.5;
     
-    // Calcola l'altezza finale
-    return Math.floor(combinedNoise * 10) + 5;
+    // Calcola l'altezza finale (meno estrema)
+    return combinedNoise * 5;
   }
   
-  createBlock(parent, x, y, z, type) {
-    const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-    let material;
+  createTree(x, y, z) {
+    // Crea un gruppo per l'albero
+    const tree = new THREE.Group();
+    tree.position.set(x, y, z);
     
-    // Set material based on block type
-    switch (type) {
-      case 'grass':
-        material = new THREE.MeshLambertMaterial({ color: 0x3bab17 });
-        break;
-      case 'dirt':
-        material = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-        break;
-      case 'stone':
-        material = new THREE.MeshLambertMaterial({ color: 0x808080 });
-        break;
-      case 'sand':
-        material = new THREE.MeshLambertMaterial({ color: 0xC2B280 });
-        break;
-      case 'water':
-        material = new THREE.MeshLambertMaterial({ 
-          color: 0x0077be,
-          transparent: true,
-          opacity: 0.7
-        });
-        break;
-      case 'wood':
-        material = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-        break;
-      case 'leaves':
-        material = new THREE.MeshLambertMaterial({ 
-          color: 0x2E8B57,
-          transparent: true,
-          opacity: 0.8
-        });
-        break;
-      default:
-        material = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    }
-    
-    const block = new THREE.Mesh(geometry, material);
-    block.position.set(
-      x * BLOCK_SIZE + BLOCK_SIZE/2,
-      y * BLOCK_SIZE + BLOCK_SIZE/2,
-      z * BLOCK_SIZE + BLOCK_SIZE/2
-    );
-    
-    block.userData = { type };
-    parent.add(block);
-    return block;
-  }
-  
-  createTree(chunk, x, y, z) {
     // Tronco
-    const trunkGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 4, BLOCK_SIZE);
+    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 4, 8);
     const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
     const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(
-      x * BLOCK_SIZE,
-      y + (BLOCK_SIZE * 2),
-      z * BLOCK_SIZE
-    );
-    chunk.add(trunk);
+    trunk.position.y = 2;
+    tree.add(trunk);
     
-    // Foglie
-    const leavesGeometry = new THREE.BoxGeometry(BLOCK_SIZE * 3, BLOCK_SIZE * 3, BLOCK_SIZE * 3);
+    // Foglie (cima dell'albero)
+    const leavesGeometry = new THREE.ConeGeometry(2, 4, 8);
     const leavesMaterial = new THREE.MeshLambertMaterial({ 
       color: 0x2E8B57,
-      transparent: true,
-      opacity: 0.8
     });
     const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
-    leaves.position.set(
-      x * BLOCK_SIZE,
-      y + (BLOCK_SIZE * 5),
-      z * BLOCK_SIZE
-    );
-    chunk.add(leaves);
+    leaves.position.y = 5.5;
+    tree.add(leaves);
+    
+    this.scene.add(tree);
   }
   
   createAirplane() {
@@ -413,6 +346,7 @@ class OpenWorldGame {
         // Exit airplane
         this.airplanePhysics.isPlayerInside = false;
         this.camera.position.y -= 2; // Move player below the airplane
+        console.log("Uscito dall'aereo");
       } else {
         // Enter airplane
         this.airplanePhysics.isPlayerInside = true;
@@ -421,12 +355,14 @@ class OpenWorldGame {
         // Position player in cockpit
         this.camera.position.copy(this.airplane.position);
         this.camera.position.y += 2;
+        console.log("Entrato nell'aereo");
       }
-      
-      console.log("Interagito con l'aereo", this.airplanePhysics.isPlayerInside ? "Entrato" : "Uscito");
+    } else {
+      console.log("Non sei abbastanza vicino all'aereo");
     }
   }
   
+  // Corretta gestione del movimento del giocatore
   updatePlayerMovement(delta) {
     // Only update player movement if not in airplane
     if (this.airplanePhysics.isPlayerInside) return;
@@ -434,17 +370,35 @@ class OpenWorldGame {
     // Apply gravity
     this.velocity.y -= 9.8 * delta;
     
-    // Get movement direction
-    this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
-    this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
-    this.direction.normalize();
+    // Reset movement velocity every frame
+    this.velocity.x = 0;
+    this.velocity.z = 0;
     
-    // Rotate movement direction based on camera rotation
-    if (this.moveForward || this.moveBackward) {
-      this.velocity.z = this.direction.z * 10.0 * delta;
+    // Get movement direction based on current key states
+    if (this.moveForward) this.velocity.z = -1;
+    if (this.moveBackward) this.velocity.z = 1;
+    if (this.moveLeft) this.velocity.x = -1;
+    if (this.moveRight) this.velocity.x = 1;
+    
+    // Normalize diagonal movement
+    if (this.velocity.x !== 0 && this.velocity.z !== 0) {
+      this.velocity.x *= 0.7071; // 1 / sqrt(2)
+      this.velocity.z *= 0.7071;
     }
-    if (this.moveLeft || this.moveRight) {
-      this.velocity.x = this.direction.x * 10.0 * delta;
+    
+    // Convert camera direction to movement direction
+    if (this.velocity.x !== 0 || this.velocity.z !== 0) {
+      // Adjust velocity based on camera rotation
+      const angle = this.camera.rotation.y;
+      const newX = this.velocity.x * Math.cos(angle) + this.velocity.z * Math.sin(angle);
+      const newZ = this.velocity.z * Math.cos(angle) - this.velocity.x * Math.sin(angle);
+      this.velocity.x = newX;
+      this.velocity.z = newZ;
+      
+      // Apply speed
+      const moveSpeed = 10.0 * delta;
+      this.velocity.x *= moveSpeed;
+      this.velocity.z *= moveSpeed;
     }
     
     // Update camera position
@@ -453,9 +407,12 @@ class OpenWorldGame {
     this.camera.position.z += this.velocity.z;
     
     // Simple collision detection with ground
-    if (this.camera.position.y < this.groundLevel + this.playerHeight) {
+    // Trova l'altezza del terreno alla posizione del giocatore
+    const terrainHeight = this.generateHeight(this.camera.position.x, this.camera.position.z) + this.playerHeight;
+    
+    if (this.camera.position.y < terrainHeight) {
       this.velocity.y = 0;
-      this.camera.position.y = this.groundLevel + this.playerHeight;
+      this.camera.position.y = terrainHeight;
       this.canJump = true;
     }
   }
@@ -469,6 +426,11 @@ class OpenWorldGame {
       this.propeller.rotation.z += 0.5;
     }
     
+    // Reset airplane velocity
+    let speed = 0;
+    let turning = 0;
+    let pitching = 0;
+    
     // Handle airplane controls
     if (this.moveForward) {
       // Accelerate
@@ -477,8 +439,12 @@ class OpenWorldGame {
         this.airplanePhysics.speed + this.airplanePhysics.acceleration * delta
       );
       this.airplanePhysics.isFlying = true;
+      pitching = -0.01; // Pitch down slightly
+    } else if (this.moveBackward) {
+      // Pitch up
+      pitching = 0.01;
     } else if (this.airplanePhysics.speed > 0) {
-      // Decelerate
+      // Decelerate when no keys pressed
       this.airplanePhysics.speed = Math.max(
         0,
         this.airplanePhysics.speed - this.airplanePhysics.deceleration * delta
@@ -491,27 +457,23 @@ class OpenWorldGame {
     
     // Handle turning
     if (this.moveLeft) {
-      this.airplane.rotation.y += this.airplanePhysics.rotationSpeed;
+      turning = this.airplanePhysics.rotationSpeed;
     }
     if (this.moveRight) {
-      this.airplane.rotation.y -= this.airplanePhysics.rotationSpeed;
+      turning = -this.airplanePhysics.rotationSpeed;
     }
     
-    // Handle pitch (up/down)
-    if (this.moveBackward) {
-      // Pitch up
-      this.airplane.rotation.x = Math.min(
-        Math.PI / 6,
-        this.airplane.rotation.x + 0.01
-      );
-    } else if (this.moveForward && this.airplanePhysics.isFlying) {
-      // Pitch down slightly when accelerating
-      this.airplane.rotation.x = Math.max(
-        -Math.PI / 12,
-        this.airplane.rotation.x - 0.005
-      );
-    } else {
-      // Level out
+    // Apply rotation
+    this.airplane.rotation.y += turning;
+    
+    // Handle pitch (up/down) with limits
+    this.airplane.rotation.x = Math.max(
+      -Math.PI / 6,
+      Math.min(Math.PI / 6, this.airplane.rotation.x + pitching)
+    );
+    
+    // Level out gradually if not pitching
+    if (!this.moveForward && !this.moveBackward) {
       this.airplane.rotation.x *= 0.95;
     }
     
@@ -538,6 +500,10 @@ class OpenWorldGame {
     // Update camera position to follow airplane
     this.camera.position.copy(this.airplane.position);
     this.camera.position.y += 2; // Position camera in cockpit
+    
+    // Match camera rotation to airplane direction
+    this.camera.rotation.y = this.airplane.rotation.y;
+    this.camera.rotation.z = this.airplane.rotation.z;
   }
   
   animate() {
@@ -552,9 +518,6 @@ class OpenWorldGame {
       this.updatePlayerMovement(delta);
     }
     
-    // Update terrain if player moved to new chunk
-    this.generateTerrain();
-    
     this.renderer.render(this.scene, this.camera);
   }
 }
@@ -564,3 +527,4 @@ document.addEventListener('DOMContentLoaded', () => {
   const game = new OpenWorldGame();
   console.log("Game started");
 });
+
