@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open World Adventure</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    
+    #instructions {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 400px;
+    }
+    
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 20px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    <h2>Comandi del gioco:</h2>
+    <p>W/A/S/D o frecce: Movimento</p>
+    <p>Mouse: Guarda intorno</p>
+    <p>Spazio: Salta</p>
+    <p>F: Interagisci (entra/esci dall'aereo)</p>
+    <p>Clicca sullo schermo per iniziare</p>
+    <p>Obiettivo: Trova l'aereo e scopri il biglietto d'oro con il numero "31"</p>
+  </div>
+  
+  <div id="crosshair">+</div>
+  
+  <!-- Librerie necessarie -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
+  
+  <!-- Il nostro script di gioco -->
+  <script src="game.js"></script>
+</body>
+</html>
