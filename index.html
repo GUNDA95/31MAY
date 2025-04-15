@@ -31,6 +31,18 @@
       font-size: 20px;
       pointer-events: none;
     }
+    
+    #loadingMessage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 20px;
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
@@ -45,10 +57,55 @@
   </div>
   
   <div id="crosshair">+</div>
+  <div id="loadingMessage">Caricamento del gioco in corso...</div>
   
   <!-- Librerie necessarie -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script>
+    // Implementazione semplificata di SimplexNoise (non richiede libreria esterna)
+    class SimplexNoise {
+      constructor() {
+        this.grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+        this.p = [];
+        for (let i = 0; i < 256; i++) {
+          this.p[i] = Math.floor(Math.random() * 256);
+        }
+        
+        this.perm = new Array(512);
+        this.gradP = new Array(512);
+        
+        this.seed(0);
+      }
+      
+      seed(seed) {
+        if (seed > 0 && seed < 1) {
+          seed *= 65536;
+        }
+        
+        seed = Math.floor(seed);
+        if (seed < 256) {
+          seed |= seed << 8;
+        }
+        
+        for (let i = 0; i < 256; i++) {
+          let v;
+          if (i & 1) {
+            v = this.p[i] ^ (seed & 255);
+          } else {
+            v = this.p[i] ^ ((seed >> 8) & 255);
+          }
+          
+          this.perm[i] = this.perm[i + 256] = v;
+          this.gradP[i] = this.gradP[i + 256] = this.grad3[v % 12];
+        }
+      }
+      
+      noise2D(x, y) {
+        // Semplificato per questo esempio
+        return (Math.sin(x * 10) + Math.cos(y * 10)) * 0.5;
+      }
+    }
+  </script>
   
   <!-- Il nostro script di gioco -->
   <script src="game.js"></script>
