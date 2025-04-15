@@ -1,15 +1,8 @@
-// Main game file using Three.js
-// This is a simplified prototype that can be expanded
-
-// Import libraries (these would need to be included in your HTML)
-// <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-// <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
-
 // Game constants
 const WORLD_SIZE = 100;
 const CHUNK_SIZE = 16;
 const BLOCK_SIZE = 1;
-const RENDER_DISTANCE = 4;
+const RENDER_DISTANCE = 2; // Ridotto per migliori prestazioni
 
 // Game class
 class OpenWorldGame {
@@ -22,12 +15,21 @@ class OpenWorldGame {
     this.renderer.setClearColor(0x87CEEB); // Sky blue
     document.body.appendChild(this.renderer.domElement);
     
+    // Rimuovi il messaggio di caricamento
+    const loadingMessage = document.getElementById('loadingMessage');
+    if (loadingMessage) {
+      loadingMessage.style.display = 'none';
+    }
+    
     this.setupLighting();
     this.setupControls();
     this.initWorld();
     this.createAirplane();
     
     window.addEventListener('resize', () => this.onWindowResize());
+    
+    // Debug log
+    console.log("Game initialized");
     
     this.animate();
   }
@@ -180,44 +182,44 @@ class OpenWorldGame {
       chunkZ * CHUNK_SIZE * BLOCK_SIZE
     );
     
-    // Create blocks for this chunk
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-      for (let z = 0; z < CHUNK_SIZE; z++) {
-        const worldX = chunkX * CHUNK_SIZE + x;
-        const worldZ = chunkZ * CHUNK_SIZE + z;
-        
-        // Generate height using noise
-        const height = this.generateHeight(worldX, worldZ);
-        
-        // Create blocks from bedrock up to height
-        for (let y = 0; y < height; y++) {
-          let blockType;
-          
-          if (y === height - 1) {
-            if (y > 12) blockType = 'stone';
-            else if (y > 6) blockType = 'dirt';
-            else blockType = 'sand';
-          } else if (y > height - 4) {
-            blockType = 'dirt';
-          } else {
-            blockType = 'stone';
-          }
-          
-          this.createBlock(chunk, x, y, z, blockType);
-        }
-        
-        // Add water for lower terrain
-        if (height < 6) {
-          for (let y = height; y < 6; y++) {
-            this.createBlock(chunk, x, y, z, 'water');
-          }
-        }
-        
-        // Randomly add trees
-        if (height > 6 && height < 12 && Math.random() < 0.01) {
-          this.createTree(chunk, x, height, z);
-        }
-      }
+    // Crea un terreno più semplice per migliorare le prestazioni
+    const geometry = new THREE.PlaneGeometry(
+      CHUNK_SIZE * BLOCK_SIZE,
+      CHUNK_SIZE * BLOCK_SIZE,
+      CHUNK_SIZE - 1,
+      CHUNK_SIZE - 1
+    );
+    geometry.rotateX(-Math.PI / 2);
+    
+    // Imposta l'altezza dei vertici in base al rumore
+    const vertices = geometry.attributes.position.array;
+    for (let i = 0; i < vertices.length; i += 3) {
+      const x = vertices[i] + chunk.position.x;
+      const z = vertices[i + 2] + chunk.position.z;
+      vertices[i + 1] = this.generateHeight(x / BLOCK_SIZE, z / BLOCK_SIZE);
+    }
+    
+    // Aggiorna la geometria
+    geometry.computeVertexNormals();
+    
+    // Crea un materiale per il terreno
+    const material = new THREE.MeshLambertMaterial({ 
+      color: 0x8B4513,
+      wireframe: false
+    });
+    
+    const terrain = new THREE.Mesh(geometry, material);
+    chunk.add(terrain);
+    
+    // Aggiungi alcuni alberi
+    for (let i = 0; i < 5; i++) {
+      const x = Math.floor(Math.random() * CHUNK_SIZE);
+      const z = Math.floor(Math.random() * CHUNK_SIZE);
+      const worldX = chunkX * CHUNK_SIZE + x;
+      const worldZ = chunkZ * CHUNK_SIZE + z;
+      const y = this.generateHeight(worldX, worldZ);
+      
+      this.createTree(chunk, x, y, z);
     }
     
     this.scene.add(chunk);
@@ -225,18 +227,18 @@ class OpenWorldGame {
   }
   
   generateHeight(x, z) {
-    // Generate terrain height using noise
+    // Usa una funzione più semplice per la generazione dell'altezza
     const scale1 = 0.01;
     const scale2 = 0.05;
     
     const noise1 = this.noise.noise2D(x * scale1, z * scale1);
     const noise2 = this.noise.noise2D(x * scale2, z * scale2);
     
-    // Combine noise at different scales
+    // Combina il rumore a scale diverse
     const combinedNoise = (noise1 + 0.5 * noise2) / 1.5;
     
-    // Calculate final height
-    return Math.floor(combinedNoise * 15) + 5;
+    // Calcola l'altezza finale
+    return Math.floor(combinedNoise * 10) + 5;
   }
   
   createBlock(parent, x, y, z, type) {
@@ -291,36 +293,31 @@ class OpenWorldGame {
   }
   
   createTree(chunk, x, y, z) {
-    // Create trunk
-    const trunkHeight = 3 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < trunkHeight; i++) {
-      this.createBlock(chunk, x, y + i, z, 'wood');
-    }
+    // Tronco
+    const trunkGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 4, BLOCK_SIZE);
+    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.set(
+      x * BLOCK_SIZE,
+      y + (BLOCK_SIZE * 2),
+      z * BLOCK_SIZE
+    );
+    chunk.add(trunk);
     
-    // Create leaves
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        for (let dy = 0; dy <= 2; dy++) {
-          // Skip corners for a rounder shape
-          if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-          
-          this.createBlock(
-            chunk, 
-            x + dx, 
-            y + trunkHeight + dy, 
-            z + dz, 
-            'leaves'
-          );
-        }
-      }
-    }
-    
-    // Top leaves
-    this.createBlock(chunk, x, y + trunkHeight + 3, z, 'leaves');
-    this.createBlock(chunk, x + 1, y + trunkHeight + 3, z, 'leaves');
-    this.createBlock(chunk, x - 1, y + trunkHeight + 3, z, 'leaves');
-    this.createBlock(chunk, x, y + trunkHeight + 3, z + 1, 'leaves');
-    this.createBlock(chunk, x, y + trunkHeight + 3, z - 1, 'leaves');
+    // Foglie
+    const leavesGeometry = new THREE.BoxGeometry(BLOCK_SIZE * 3, BLOCK_SIZE * 3, BLOCK_SIZE * 3);
+    const leavesMaterial = new THREE.MeshLambertMaterial({ 
+      color: 0x2E8B57,
+      transparent: true,
+      opacity: 0.8
+    });
+    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+    leaves.position.set(
+      x * BLOCK_SIZE,
+      y + (BLOCK_SIZE * 5),
+      z * BLOCK_SIZE
+    );
+    chunk.add(leaves);
   }
   
   createAirplane() {
@@ -385,21 +382,25 @@ class OpenWorldGame {
     this.goldTicket.position.set(0, 0.5, 0);
     this.goldTicket.rotation.x = Math.PI / 2;
     
-    // Add text with "31"
-    const textGeometry = new THREE.TextGeometry("31", {
-      font: new THREE.Font(), // You'd need to load a font
-      size: 0.2,
-      height: 0.05
-    });
+    // Semplice testo "31"
     const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.set(-0.1, 0.2, 0);
     
-    // In a real implementation, you'd load a font and add the text
-    // For this prototype, we'll just add the ticket itself
+    // Box per il numero "3"
+    const number3Geometry = new THREE.BoxGeometry(0.15, 0.05, 0.05);
+    const number3 = new THREE.Mesh(number3Geometry, textMaterial);
+    number3.position.set(-0.1, 0.16, 0);
+    this.goldTicket.add(number3);
+    
+    // Box per il numero "1"
+    const number1Geometry = new THREE.BoxGeometry(0.05, 0.15, 0.05);
+    const number1 = new THREE.Mesh(number1Geometry, textMaterial);
+    number1.position.set(0.1, 0.16, 0);
+    this.goldTicket.add(number1);
+    
+    // Aggiungi il biglietto all'aereo
     this.airplane.add(this.goldTicket);
     
-    // The ticket is initially not visible/accessible to the player
+    // Il biglietto è inizialmente invisibile
     this.goldTicket.visible = false;
   }
   
@@ -421,6 +422,8 @@ class OpenWorldGame {
         this.camera.position.copy(this.airplane.position);
         this.camera.position.y += 2;
       }
+      
+      console.log("Interagito con l'aereo", this.airplanePhysics.isPlayerInside ? "Entrato" : "Uscito");
     }
   }
   
@@ -559,4 +562,5 @@ class OpenWorldGame {
 // Initialize game when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   const game = new OpenWorldGame();
+  console.log("Game started");
 });
