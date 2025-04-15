@@ -527,4 +527,3 @@ document.addEventListener('DOMContentLoaded', () => {
   const game = new OpenWorldGame();
   console.log("Game started");
 });
-
