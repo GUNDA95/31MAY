@@ -31,10 +31,12 @@ class OpenWorldGame {
     this.setupLighting();
     this.setupControls();
     this.initWorld();
-    this.createAirplane();
     
     // Posiziona correttamente il giocatore sopra il terreno
     this.camera.position.set(0, 15, 0); // Inizia da un'altezza sicura
+    
+    // Crea l'aereo dopo aver inizializzato il mondo
+    this.createAirplane();
     
     window.addEventListener('resize', () => this.onWindowResize());
     
@@ -196,8 +198,29 @@ class OpenWorldGame {
       this.createTree(x, y, z);
     }
     
+    // Crea una pista di atterraggio vicino all'aereo (area piatta)
+    this.createRunway();
+    
     // Aggiunge una "skybox" per creare un orizzonte
     this.createSkybox();
+  }
+  
+  createRunway() {
+    // Crea una semplice pista di atterraggio (area piatta vicino al punto di partenza)
+    const runwayGeometry = new THREE.PlaneGeometry(10, 30, 1, 1);
+    runwayGeometry.rotateX(-Math.PI / 2);
+    
+    const runwayMaterial = new THREE.MeshLambertMaterial({
+      color: 0x555555, // Colore grigio asfalto
+      wireframe: false
+    });
+    
+    const runway = new THREE.Mesh(runwayGeometry, runwayMaterial);
+    
+    // Posiziona la pista vicino al punto di partenza
+    runway.position.set(15, 0.1, 10); // Leggermente sopra il terreno
+    
+    this.scene.add(runway);
   }
   
   createSkybox() {
@@ -254,42 +277,57 @@ class OpenWorldGame {
   }
   
   createAirplane() {
-    // Create a simple airplane model
+    // Create a larger airplane model
     this.airplane = new THREE.Group();
     
-    // Fuselage
-    const fuselageGeometry = new THREE.BoxGeometry(10, 2, 2);
+    // Fuselage - più lungo e più largo
+    const fuselageGeometry = new THREE.BoxGeometry(15, 3, 3);
     const fuselageMaterial = new THREE.MeshLambertMaterial({ color: 0xcccccc });
     const fuselage = new THREE.Mesh(fuselageGeometry, fuselageMaterial);
     this.airplane.add(fuselage);
     
-    // Wings
-    const wingGeometry = new THREE.BoxGeometry(4, 0.5, 14);
+    // Wings - più grandi
+    const wingGeometry = new THREE.BoxGeometry(6, 0.7, 20);
     const wingMaterial = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     const wings = new THREE.Mesh(wingGeometry, wingMaterial);
     wings.position.y = 0.5;
     this.airplane.add(wings);
     
-    // Tail
-    const tailGeometry = new THREE.BoxGeometry(1, 3, 3);
+    // Tail - più grande
+    const tailGeometry = new THREE.BoxGeometry(1.5, 4, 4);
     const tailMaterial = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-    tail.position.set(-5, 1, 0);
+    tail.position.set(-7.5, 1.5, 0);
     this.airplane.add(tail);
     
-    // Propeller
-    const propellerGeometry = new THREE.BoxGeometry(0.5, 0.2, 4);
+    // Propeller - più grande
+    const propellerGeometry = new THREE.BoxGeometry(0.8, 0.3, 6);
     const propellerMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
     this.propeller = new THREE.Mesh(propellerGeometry, propellerMaterial);
-    this.propeller.position.set(5.25, 0, 0);
+    this.propeller.position.set(7.9, 0, 0);
     this.airplane.add(this.propeller);
+    
+    // Ruote dell'aereo per renderlo a terra
+    this.createWheels();
     
     // Create the gold ticket inside
     this.createGoldTicket();
     
-    // Position airplane in the world
-    this.airplane.position.set(20, 15, 30);
+    // Metti un testo sopra l'aereo per renderlo più facile da trovare
+    this.createAirplaneSign();
+    
+    // Position airplane on the ground near the player's starting position
+    // Determina l'altezza del terreno in questa posizione
+    const airplaneX = 15;
+    const airplaneZ = 20;
+    const terrainHeight = this.generateHeight(airplaneX, airplaneZ);
+    
+    // Posiziona l'aereo a terra
+    this.airplane.position.set(airplaneX, terrainHeight + 1.5, airplaneZ); // +1.5 per le ruote
     this.scene.add(this.airplane);
+    
+    // Crea una freccia che punta all'aereo
+    this.createDirectionalArrow();
     
     // Airplane physics properties
     this.airplanePhysics = {
@@ -303,31 +341,108 @@ class OpenWorldGame {
       gravity: 0.1,
       isFlying: false
     };
+    
+    console.log("Aereo creato e posizionato a terra", this.airplane.position);
+  }
+  
+  createWheels() {
+    // Ruota anteriore
+    const frontWheelGeometry = new THREE.CylinderGeometry(0.8, 0.8, 0.4, 8);
+    frontWheelGeometry.rotateX(Math.PI / 2);
+    const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const frontWheel = new THREE.Mesh(frontWheelGeometry, wheelMaterial);
+    
+    // Posiziona la ruota anteriore
+    frontWheel.position.set(5, -1.5, 0);
+    this.airplane.add(frontWheel);
+    
+    // Ruote posteriori (sotto le ali)
+    const leftWheelGeometry = new THREE.CylinderGeometry(1, 1, 0.5, 8);
+    leftWheelGeometry.rotateX(Math.PI / 2);
+    const leftWheel = new THREE.Mesh(leftWheelGeometry, wheelMaterial);
+    leftWheel.position.set(-2, -1.5, -5);
+    this.airplane.add(leftWheel);
+    
+    const rightWheelGeometry = new THREE.CylinderGeometry(1, 1, 0.5, 8);
+    rightWheelGeometry.rotateX(Math.PI / 2);
+    const rightWheel = new THREE.Mesh(rightWheelGeometry, wheelMaterial);
+    rightWheel.position.set(-2, -1.5, 5);
+    this.airplane.add(rightWheel);
+  }
+  
+  createAirplaneSign() {
+    // Crea un semplice cartello sopra l'aereo per renderlo più visibile
+    const signGeometry = new THREE.BoxGeometry(4, 1, 0.2);
+    const signMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    const sign = new THREE.Mesh(signGeometry, signMaterial);
+    
+    // Posiziona il cartello sopra l'aereo
+    sign.position.set(0, 4, 0);
+    this.airplane.add(sign);
+    
+    // Aggiungi un palo di supporto
+    const poleGeometry = new THREE.CylinderGeometry(0.2, 0.2, 4, 8);
+    const poleMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    
+    // Posiziona il palo
+    pole.position.set(0, 2, 0);
+    this.airplane.add(pole);
+  }
+  
+  createDirectionalArrow() {
+    // Crea una freccia che punta verso l'aereo dalla posizione di partenza
+    const arrowDirection = new THREE.Vector3().subVectors(this.airplane.position, new THREE.Vector3(0, 10, 0)).normalize();
+    
+    // Crea un gruppo per la freccia
+    this.arrow = new THREE.Group();
+    
+    // Crea la linea della freccia
+    const arrowLineGeometry = new THREE.CylinderGeometry(0.3, 0.3, 5, 8);
+    const arrowLineMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    const arrowLine = new THREE.Mesh(arrowLineGeometry, arrowLineMaterial);
+    
+    // Ruota la linea per puntare nella direzione corretta
+    arrowLine.position.set(0, 2.5, 0);
+    this.arrow.add(arrowLine);
+    
+    // Crea la punta della freccia
+    const arrowHeadGeometry = new THREE.ConeGeometry(0.6, 1.5, 8);
+    const arrowHeadMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    const arrowHead = new THREE.Mesh(arrowHeadGeometry, arrowHeadMaterial);
+    
+    // Posiziona la punta alla fine della linea
+    arrowHead.position.set(0, 5.5, 0);
+    this.arrow.add(arrowHead);
+    
+    // Posiziona la freccia sopra il giocatore
+    this.arrow.position.set(5, 10, 5);
+    this.scene.add(this.arrow);
   }
   
   createGoldTicket() {
-    // Create the golden ticket with "31" inscription
-    const ticketGeometry = new THREE.BoxGeometry(0.5, 0.3, 0.8);
+    // Create the golden ticket with "31" inscription - più grande
+    const ticketGeometry = new THREE.BoxGeometry(1, 0.5, 1.5);
     const ticketMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
     this.goldTicket = new THREE.Mesh(ticketGeometry, ticketMaterial);
     
     // Position the ticket inside the airplane
-    this.goldTicket.position.set(0, 0.5, 0);
+    this.goldTicket.position.set(0, 0.8, 0);
     this.goldTicket.rotation.x = Math.PI / 2;
     
     // Semplice testo "31"
     const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
     
     // Box per il numero "3"
-    const number3Geometry = new THREE.BoxGeometry(0.15, 0.05, 0.05);
+    const number3Geometry = new THREE.BoxGeometry(0.25, 0.1, 0.1);
     const number3 = new THREE.Mesh(number3Geometry, textMaterial);
-    number3.position.set(-0.1, 0.16, 0);
+    number3.position.set(-0.2, 0.26, 0);
     this.goldTicket.add(number3);
     
     // Box per il numero "1"
-    const number1Geometry = new THREE.BoxGeometry(0.05, 0.15, 0.05);
+    const number1Geometry = new THREE.BoxGeometry(0.1, 0.25, 0.1);
     const number1 = new THREE.Mesh(number1Geometry, textMaterial);
-    number1.position.set(0.1, 0.16, 0);
+    number1.position.set(0.2, 0.26, 0);
     this.goldTicket.add(number1);
     
     // Aggiungi il biglietto all'aereo
@@ -341,12 +456,23 @@ class OpenWorldGame {
     // Check if player is near the airplane
     const distance = this.camera.position.distanceTo(this.airplane.position);
     
-    if (distance < 5) {
+    console.log("Distanza dall'aereo:", distance);
+    
+    if (distance < 8) { // Aumenta la distanza di interazione
       if (this.airplanePhysics.isPlayerInside) {
         // Exit airplane
         this.airplanePhysics.isPlayerInside = false;
-        this.camera.position.y -= 2; // Move player below the airplane
+        
+        // Posiziona il giocatore vicino all'aereo
+        const exitPosition = new THREE.Vector3().copy(this.airplane.position);
+        exitPosition.x += 3; // Uscita dal lato dell'aereo
+        exitPosition.y = this.generateHeight(exitPosition.x, exitPosition.z) + this.playerHeight;
+        this.camera.position.copy(exitPosition);
+        
         console.log("Uscito dall'aereo");
+        
+        // Mostra un messaggio sullo schermo
+        this.showMessage("Sei uscito dall'aereo");
       } else {
         // Enter airplane
         this.airplanePhysics.isPlayerInside = true;
@@ -355,11 +481,51 @@ class OpenWorldGame {
         // Position player in cockpit
         this.camera.position.copy(this.airplane.position);
         this.camera.position.y += 2;
+        
         console.log("Entrato nell'aereo");
+        
+        // Mostra un messaggio sullo schermo
+        this.showMessage("Sei entrato nell'aereo! Hai trovato il biglietto d'oro!");
       }
     } else {
       console.log("Non sei abbastanza vicino all'aereo");
+      
+      // Mostra un messaggio sullo schermo
+      this.showMessage("Avvicinati all'aereo per interagire (usa il tasto F)");
     }
+  }
+  
+  showMessage(text) {
+    // Rimuovi eventuali messaggi precedenti
+    const oldMessage = document.getElementById('gameMessage');
+    if (oldMessage) {
+      document.body.removeChild(oldMessage);
+    }
+    
+    // Crea un elemento per il messaggio
+    const messageElement = document.createElement('div');
+    messageElement.id = 'gameMessage';
+    messageElement.style.position = 'absolute';
+    messageElement.style.top = '20px';
+    messageElement.style.left = '50%';
+    messageElement.style.transform = 'translateX(-50%)';
+    messageElement.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    messageElement.style.color = 'white';
+    messageElement.style.padding = '10px 20px';
+    messageElement.style.borderRadius = '5px';
+    messageElement.style.fontFamily = 'Arial, sans-serif';
+    messageElement.style.zIndex = '1000';
+    messageElement.innerHTML = text;
+    
+    // Aggiungi il messaggio al DOM
+    document.body.appendChild(messageElement);
+    
+    // Rimuovi il messaggio dopo 3 secondi
+    setTimeout(() => {
+      if (messageElement.parentNode) {
+        document.body.removeChild(messageElement);
+      }
+    }, 3000);
   }
   
   // Corretta gestione del movimento del giocatore
@@ -414,6 +580,15 @@ class OpenWorldGame {
       this.velocity.y = 0;
       this.camera.position.y = terrainHeight;
       this.canJump = true;
+    }
+    
+    // Aggiorna la posizione della freccia per puntare sempre all'aereo
+    if (this.arrow) {
+      const arrowDirection = new THREE.Vector3().subVectors(this.airplane.position, this.camera.position).normalize();
+      this.arrow.position.copy(this.camera.position).add(new THREE.Vector3(0, 3, 0));
+      
+      // Fai ruotare la freccia per puntare all'aereo
+      this.arrow.lookAt(this.airplane.position);
     }
   }
   
@@ -524,6 +699,12 @@ class OpenWorldGame {
 
 // Initialize game when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  // Mostra un messaggio di benvenuto
   const game = new OpenWorldGame();
+  
+  // Mostra istruzioni iniziali
+  game.showMessage("Benvenuto! Usa WASD per muoverti, F per interagire con l'aereo. Cerca l'aereo con il biglietto d'oro!");
+  
   console.log("Game started");
 });
+</antArt
